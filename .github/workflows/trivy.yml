@@ -1,0 +1,41 @@
+name: trivy
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '20 3 * * 5'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    permissions:
+      contents: read # for actions/checkout to fetch code
+      security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
+    name: trivy
+    runs-on: "ubuntu-22.04"
+    steps:
+      - name: Checkout GitHub code
+        uses: actions/checkout@v3
+
+      - name: Read Keycloak version from .env file
+        id: getversion
+        run: echo "$(grep 'KC_VERSION' .env)" >> $GITHUB_OUTPUT
+
+      - name: Scan Keycloak with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'quay.io/keycloak/keycloak:${{ steps.getversion.outputs.KC_VERSION }}'
+          format: 'sarif'
+          output: 'trivy-keycloak.sarif'
+          ignore-unfixed: false
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+      - name: Upload scan Keycloak results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-keycloak.sarif'
