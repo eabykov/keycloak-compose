@@ -3,6 +3,6 @@ updates:
   - package-ecosystem: "docker"
     directory: "docker"
     schedule:
-      interval: "hourly"
+      interval: "daily"
     labels:
       - "dependencies"
