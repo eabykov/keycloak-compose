@@ -1,2 +1,2 @@
 # https://github.com/grafana/grafana/releases
-FROM grafana/grafana:10.0.3
+FROM grafana/grafana:10.1.0
