@@ -70,6 +70,7 @@ services:
       test: ["CMD", "wget", "--spider", "http://localhost:${GF_SERVER_HTTP_PORT}/api/health"]
     environment:
       GF_SERVER_HTTP_PORT: ${GF_SERVER_HTTP_PORT}
+      GF_SERVER_ROOT_URL: ${GF_HOSTNAME}:${GF_SERVER_HTTP_PORT}
       GF_LOG_LEVEL: ${GF_LOG_LEVEL}
       GF_AUTH_BASIC_ENABLED: true
       GF_AUTH_DISABLE_LOGIN_FORM: true
