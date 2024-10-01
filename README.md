@@ -19,11 +19,3 @@ docker compose up -d
 | `docker compose logs` | Shows logs of containers (`-f` to follow logs)
 | `docker compose down` | Stop and remove containers (`-v` remove named volumes declared in the volumes section of the Compose file and anonymous volumes attached to containers)
 | `docker system prune -a -f` | Remove all unused containers, networks, images (`--volumes` prune volumes)
-
-<a href="https://star-history.com/#eabykov/keycloak-compose&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=eabykov/keycloak-compose&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=eabykov/keycloak-compose&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=eabykov/keycloak-compose&type=Date" />
- </picture>
-</a>
