@@ -98,9 +98,9 @@ services:
     ports:
       - "443:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./cert.pem:/etc/ssl/certs/cert.pem:ro
-      - ./key.pem:/etc/ssl/private/key.pem:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/cert.pem:/etc/ssl/certs/cert.pem:ro
+      - ./nginx/key.pem:/etc/ssl/private/key.pem:ro
     depends_on:
       - keycloak
       - grafana
