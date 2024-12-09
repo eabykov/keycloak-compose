@@ -31,6 +31,10 @@ services:
       KC_DB_PASSWORD: password
       KC_DB_URL: "jdbc:postgresql://postgres:5432/keycloak"
       KC_METRICS_ENABLED: true
+      KC_PROXY_HEADERS: "xforwarded"
+      KC_HTTP_ENABLED: true
+      KC_PROXY: "edge"
+      KC_HOSTNAME_STRICT: false
       KC_LOG_LEVEL: ${KC_LOG_LEVEL}
       KC_REALM_NAME: ${KC_REALM_NAME}
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN}
@@ -38,8 +42,8 @@ services:
       GF_URL: ${GF_HOSTNAME}:${GF_SERVER_HTTP_PORT}
       GF_ADMIN_USERNAME: ${GF_ADMIN_USERNAME}
       GF_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD}
-    ports:
-      - ${KC_PORT}:8080
+    # ports:
+    #   - ${KC_PORT}:8080
     volumes:
       - ./keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
     logging: *logging
@@ -55,8 +59,8 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
-    ports:
-      - ${PROMETHEUS_PORT}:9090
+    # ports:
+    #   - ${PROMETHEUS_PORT}:9090
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     logging: *logging
@@ -64,8 +68,8 @@ services:
   grafana:
     image: grafana/grafana-oss:${GF_VERSION}
     restart: unless-stopped
-    ports:
-      - ${GF_SERVER_HTTP_PORT}:${GF_SERVER_HTTP_PORT}
+    # ports:
+    #   - ${GF_SERVER_HTTP_PORT}:${GF_SERVER_HTTP_PORT}
     healthcheck:
       test: ["CMD", "wget", "--spider", "http://localhost:${GF_SERVER_HTTP_PORT}/api/health"]
     environment:
@@ -88,3 +92,15 @@ services:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
     logging: *logging
+
+  nginx:
+    image: nginx:latest
+    ports:
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./cert.pem:/etc/ssl/certs/cert.pem:ro
+      - ./key.pem:/etc/ssl/private/key.pem:ro
+    depends_on:
+      - keycloak
+      - grafana
