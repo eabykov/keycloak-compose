@@ -10,8 +10,8 @@ Containerized solution for running Keycloak with PostgreSQL, monitoring via Prom
 
 2. Clone repository:
    ```bash
-   git clone https://github.com/your-username/your-repo.git
-   cd your-repo
+   git clone https://github.com/eabykov/keycloak-compose.git
+   cd keycloak-compose
    ```
 
 3. Start the system:
