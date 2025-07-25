@@ -41,7 +41,7 @@ services:
     ports:
       - ${KC_PORT}:8080
     volumes:
-      - ./keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
+      - ./keycloak:/opt/keycloak/data/import:ro
     logging: *logging
 
   prometheus:
