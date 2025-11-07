@@ -22,7 +22,7 @@ services:
     logging: *logging
 
   keycloak:
-    image: quay.io/keycloak/keycloak:${KC_VERSION}
+    image: keycloak/keycloak:${KC_VERSION}
     command: ["start-dev", "--import-realm"]
     restart: unless-stopped
     environment:
@@ -62,7 +62,7 @@ services:
     logging: *logging
 
   grafana:
-    image: grafana/grafana-oss:${GF_VERSION}
+    image: grafana/grafana:${GF_VERSION}
     restart: unless-stopped
     ports:
       - ${GF_SERVER_HTTP_PORT}:${GF_SERVER_HTTP_PORT}
