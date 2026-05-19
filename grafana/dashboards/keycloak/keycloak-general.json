@@ -86,7 +86,7 @@
             "uid": "P02FBFF047EDBB13A"
           },
           "editorMode": "code",
-          "expr": "base_cpu_availableProcessors",
+          "expr": "system_cpu_count",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -155,7 +155,7 @@
             "uid": "P02FBFF047EDBB13A"
           },
           "editorMode": "code",
-          "expr": "base_cpu_systemLoadAverage",
+          "expr": "system_load_average_1m",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -283,7 +283,7 @@
             "uid": "P02FBFF047EDBB13A"
           },
           "editorMode": "code",
-          "expr": "base_memory_usedHeap_bytes",
+          "expr": "jvm_memory_used_bytes{area=\"heap\"}",
           "instant": false,
           "legendFormat": "Used",
           "range": true,
@@ -295,7 +295,7 @@
             "uid": "P02FBFF047EDBB13A"
           },
           "editorMode": "code",
-          "expr": "base_memory_maxHeap_bytes",
+          "expr": "jvm_memory_max_bytes{area=\"heap\"}",
           "hide": false,
           "instant": false,
           "legendFormat": "Max",
@@ -308,7 +308,7 @@
             "uid": "P02FBFF047EDBB13A"
           },
           "editorMode": "code",
-          "expr": "base_memory_committedHeap_bytes",
+          "expr": "jvm_memory_committed_bytes{area=\"heap\"}",
           "hide": false,
           "instant": false,
           "legendFormat": "Committed",
@@ -736,7 +736,7 @@
             "uid": "P02FBFF047EDBB13A"
           },
           "editorMode": "code",
-          "expr": "agroal_blocking_time_max_seconds",
+          "expr": "(agroal_blocking_time_max_milliseconds / 1000)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -837,7 +837,7 @@
             "uid": "P02FBFF047EDBB13A"
           },
           "editorMode": "code",
-          "expr": "base_classloader_loadedClasses_total",
+          "expr": "jvm_classes_loaded_classes",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -939,7 +939,7 @@
             "uid": "P02FBFF047EDBB13A"
           },
           "editorMode": "code",
-          "expr": "base_classloader_unloadedClasses_total",
+          "expr": "jvm_classes_unloaded_classes_total",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -1004,7 +1004,7 @@
             "uid": "P02FBFF047EDBB13A"
           },
           "editorMode": "code",
-          "expr": "agroal_creation_time_average_seconds",
+          "expr": "(agroal_creation_time_average_milliseconds / 1000)",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -1203,7 +1203,7 @@
             "uid": "P02FBFF047EDBB13A"
           },
           "editorMode": "code",
-          "expr": "base_classloader_loadedClasses_count",
+          "expr": "jvm_classes_loaded_classes",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -1268,7 +1268,7 @@
             "uid": "P02FBFF047EDBB13A"
           },
           "editorMode": "code",
-          "expr": "agroal_creation_time_total_seconds",
+          "expr": "(agroal_creation_time_total_milliseconds / 1000)",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -1398,7 +1398,7 @@
             "uid": "P02FBFF047EDBB13A"
           },
           "editorMode": "code",
-          "expr": "agroal_blocking_time_average_seconds",
+          "expr": "(agroal_blocking_time_average_milliseconds / 1000)",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -1887,7 +1887,7 @@
             "uid": "P02FBFF047EDBB13A"
           },
           "editorMode": "code",
-          "expr": "agroal_blocking_time_total_seconds",
+          "expr": "(agroal_blocking_time_total_milliseconds / 1000)",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -1952,7 +1952,7 @@
             "uid": "P02FBFF047EDBB13A"
           },
           "editorMode": "code",
-          "expr": "agroal_creation_time_max_seconds",
+          "expr": "(agroal_creation_time_max_milliseconds / 1000)",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -2090,7 +2090,7 @@
             "uid": "P02FBFF047EDBB13A"
           },
           "editorMode": "code",
-          "expr": "base_thread_daemon_count",
+          "expr": "jvm_threads_daemon_threads",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -2159,7 +2159,7 @@
             "uid": "P02FBFF047EDBB13A"
           },
           "editorMode": "code",
-          "expr": "base_thread_max_count",
+          "expr": "jvm_threads_peak_threads",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,

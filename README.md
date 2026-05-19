@@ -1,220 +1,163 @@
 # Keycloak Observability Stack
 
-Production-ready monitoring stack for Keycloak with Prometheus metrics and Grafana dashboards, featuring OAuth2/OIDC authentication.
+Local observability stack: Keycloak + Postgres + Prometheus + Grafana with OAuth/OIDC authentication for Grafana via Keycloak. Suitable as a reference for verifying Keycloak metrics and exercising the OAuth flow.
+
+> [!WARNING]
+> This is a **dev configuration**: Keycloak runs in `start-dev`, Postgres uses `tmpfs` (data does not survive a restart), default passwords live in `.env`. For production use, see the [Production checklist](#production-checklist).
 
 ## Architecture
 
-- **Keycloak** - Identity and access management with metrics enabled
-- **Prometheus** - Time-series metrics collection (15s scrape interval, 30d retention)
-- **Grafana** - Metrics visualization with OAuth authentication
-- **PostgreSQL** - Keycloak backend (ephemeral storage)
+```
+                                  ┌──────────────────────┐
+   Browser ──── http://localhost:3000 (GF_SERVER_HTTP_PORT) ─→ Grafana
+      │                           └─────────┬────────────┘
+      │                          OAuth      │ backchannel (token/userinfo)
+      │                       (frontchannel)│  http://keycloak:8080 (docker DNS)
+      ▼                                     ▼
+   http://localhost:8080 (KC_PORT) ───→ Keycloak (start-dev, realm-import)
+                                          │ │
+                          metrics :9000 ──┘ └── JDBC :5432 ──→ Postgres (tmpfs)
+                              │
+                              ▼
+                          Prometheus  ──── scrape 15s ──┐
+                              ▲                         │
+                              └── Grafana datasource ◄──┘
+```
+
+Version changes are made via `.env`.
 
 ## Prerequisites
 
-- [Docker](https://docs.docker.com/get-docker/) v20.10.7+
-- [Docker Compose](https://docs.docker.com/compose/install/) v2.0.0+
+- [Docker](https://docs.docker.com/get-docker/) ≥ 24.x
+- [Docker Compose v2](https://docs.docker.com/compose/install/) (`docker compose`, not `docker-compose`)
+- Free ports: `3000`, `8080`, `9090` (or override in `.env`)
 
 ## Quick Start
 
 ```sh
-# Clone the repository
-git clone https://github.com/ML-ZoneReaper/keycloak-compose.git
+git clone git@github.com:ML-ZoneReaper/keycloak-compose.git
 cd keycloak-compose
 
-# Start the stack
+# Start with health checks
 docker compose up -d
+docker compose ps   # all services should be in healthy status
 
-# Verify services are running
-docker compose ps
-
-# Follow logs in real-time
+# Live logs
 docker compose logs -f
 ```
 
-## Access Points
+The first start takes ~60 seconds (Keycloak imports the realm and runs migrations against an empty DB). Healthchecks with `start_period: 60s` handle this correctly — Grafana waits for Keycloak readiness thanks to `depends_on.condition: service_healthy`.
 
-| Service | URL | Credentials |
-|---------|-----|-------------|
-| Grafana | http://localhost:3000 | admin / grafana |
-| Keycloak | http://localhost:8080 | admin / keycloak |
-| Prometheus | http://localhost:9090 | - |
+## Access points
 
-### First-Time Setup
+| Service    | URL                                | Credentials (default) |
+|------------|------------------------------------|-----------------------|
+| Grafana    | http://localhost:3000              | OAuth via Keycloak    |
+| Keycloak   | http://localhost:8080              | `admin` / `keycloak`  |
+| Prometheus | http://localhost:9090              | no authentication     |
 
-1. Access Keycloak Admin Console at http://localhost:8080
-2. Log in with default credentials (`admin` / `keycloak`)
-3. Grafana will authenticate through Keycloak OAuth automatically
+The Grafana login form is disabled (`GF_AUTH_DISABLE_LOGIN_FORM=true`). Sign-in is only via the "Sign in with Keycloak" button → user `admin` / `grafana`.
 
-## Configuration
+## Key features
 
-Environment variables in `.env`:
+- **OAuth (PKCE)** — Grafana acts as a public client with PKCE `S256`, no client_secret.
+- **Auto-provisioned dashboards** — Grafana pulls dashboards from `grafana/dashboards/` via provisioning. The datasource UID is hardcoded (`P02FBFF047EDBB13A`) and matches between `datasources.yml` and the dashboard JSON.
+- **Realm import** — `keycloak/realm.json` is imported at startup, with `${VAR}` substitution from env.
+- **JVM/Agroal/JGroups metrics** — exposed on management port `9000`, scraped by Prometheus every 15s, 30d retention.
+- **Healthchecks with `start_period`** — correct startup ordering, `depends_on.condition: service_healthy`.
+- **Security baseline** — `no-new-privileges:true` on all services, custom docker network, containers with explicit names.
 
-**Important**: Modify credentials before deploying to production.
+## OAuth flow (important to know)
 
-## Key Features
+The main classic pitfall is which URLs to use for OAuth endpoints.
 
-- **Pre-configured OAuth** - Grafana authenticates via Keycloak OIDC
-- **Auto-provisioned Dashboards** - Pre-loaded Keycloak monitoring dashboard
-- **JVM Monitoring** - Heap memory, GC metrics, thread counts, class loading
-- **Connection Pooling** - Agroal datasource metrics (idle, active, leak detection)
-- **Structured Logging** - JSON logs with rotation (10MB × 3 files)
-- **Data Retention** - 30-day metric retention in Prometheus
+| Endpoint             | Who calls it    | URL                                                  |
+|----------------------|-----------------|------------------------------------------------------|
+| `auth_url`           | browser (UA)    | external `${KC_HOSTNAME}:${KC_PORT}` → `http://localhost:8080` |
+| `token_url`          | Grafana → KC    | internal `http://keycloak:8080` (docker DNS)         |
+| `api_url` (userinfo) | Grafana → KC    | internal `http://keycloak:8080` (docker DNS)         |
+| `signout_redirect`   | browser (UA)    | external `${KC_HOSTNAME}:${KC_PORT}`                 |
 
-## Metrics Coverage
+If you point `api_url`/`token_url` at `localhost`, Grafana will resolve `localhost` inside its own container and OAuth will break. On the backchannel, Keycloak's internal port is **always 8080**, regardless of which host port it's mapped to via `${KC_PORT}`.
 
-### JVM Metrics
-- **Memory**: heap usage, committed memory, max heap
-- **Garbage Collection**: collection count/time by collector type
-- **Threads**: live threads, daemon threads, peak thread count
-- **Class Loading**: loaded classes, unloaded classes, current count
+## Metrics
 
-### Connection Pool (Agroal)
-- Active/idle/awaiting connections
-- Acquisition time (average, maximum, total)
-- Connection creation time and count
-- Leak detection events
-- Flush and reap operations
-- Maximum concurrent connections
+Endpoint: `http://keycloak:9000/metrics` (inside the docker network), enabled via `KC_METRICS_ENABLED=true` + `KC_HEALTH_ENABLED=true` (the latter is required to open management port 9000).
 
-### System Metrics
-- Available processors
-- System load average
-- CPU utilization
+The `keycloak-general.json` dashboard covers:
+- **JVM:** heap (used/committed/max), GC pause count/duration, threads, classloader
+- **Agroal (connection pool):** idle/acquired/awaiting connections, leak detection, acquisition time
+- **System:** CPU, load average, available processors
 
-## Management Commands
-
-### Service Control
+## Management commands
 
 ```sh
-# Start services
-docker compose up -d
+# Full restart with rebuild
+docker compose down && docker compose up -d
 
-# Stop services
-docker compose down
-
-# Stop and remove volumes (destroys data)
+# Tear down along with volumes (tmpfs is ephemeral anyway)
 docker compose down -v
 
-# Restart specific service
+# Restart a single service (e.g. after editing realm.json)
 docker compose restart keycloak
 
-# View service status
-docker compose ps
-```
+# Service health
+docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Health}}"
 
-### Monitoring & Logs
-
-```sh
-# Follow all logs
-docker compose logs -f
-
-# Follow specific service logs
+# Logs for a specific service
 docker compose logs -f keycloak
-docker compose logs -f prometheus
-docker compose logs -f grafana
 
-# View resource usage
-docker stats
+# Verify that Prometheus sees the Keycloak target
+curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, health}'
 ```
-
-### Data Management
-
-```sh
-# Remove all containers, volumes, and images
-docker compose down -v --rmi all
-
-# Clean up Docker system (use with caution)
-docker system prune -a -f --volumes
-```
-
-## Monitoring
-
-Access the pre-configured Keycloak dashboard in Grafana after OAuth login:
-
-**Dashboard Panels Include:**
-- System resources (CPU, load average)
-- Memory utilization trends over time
-- Connection pool health and saturation
-- Garbage collection behavior analysis
-- Thread count and daemon threads
-- Class loading statistics
-
-**Prometheus Metrics Endpoint:**
-- Keycloak metrics: http://keycloak:9000/metrics
-- Prometheus self-metrics: http://prometheus:9090/metrics
-
-## Security Notes
-
-⚠️ **Development Configuration**
-- Keycloak runs in dev mode (`start-dev`)
-- PostgreSQL uses tmpfs (ephemeral storage - data lost on restart)
-- SSL verification disabled for OAuth (local development only)
-- Default credentials are insecure
-
-🔒 **Production Recommendations**
-- Change all default passwords in `.env`
-- Enable production mode: replace `start-dev` with `start`
-- Use persistent volumes for PostgreSQL
-- Enable SSL/TLS for all services
-- Configure proper network isolation
-- Implement secret management (Vault, etc.)
-- Review and harden Keycloak realm settings
 
 ## Troubleshooting
 
-### Services Won't Start
+### Grafana dashboard is empty ("No data" in panels)
 
-**Check port conflicts:**
+1. Check targets: `curl -s localhost:9090/api/v1/targets | jq '.data.activeTargets[].health'` — they should all be `up`.
+2. Verify that the datasource UID in `grafana/datasources/datasources.yml` matches the UID referenced by the dashboard panels (`P02FBFF047EDBB13A`).
+3. In the Grafana UI: Configuration → Data sources → Prometheus → Save & test.
 
-```sh
-# Verify ports 3000, 8080, 9090 are available
-lsof -i :3000
-lsof -i :8080
-lsof -i :9090
-```
+### Grafana refuses to authenticate via OAuth
 
-**Inspect service health:**
+Most often this is a URL mismatch. Set `GF_LOG_LEVEL=debug` in `.env`, restart grafana, and inspect `docker compose logs grafana | grep -i oauth`.
 
-```sh
-# Check container status
-docker compose ps
+Typical cases:
+- `redirect_uri mismatch` → `redirectUris` in `realm.json` doesn't match Grafana's actual callback (`/login/generic_oauth`).
+- `connection refused` to token_url → `token_url` is using `localhost` instead of `keycloak`.
+- `invalid issuer` → `KC_HOSTNAME` is misconfigured.
 
-# View recent logs
-docker compose logs --tail=50 keycloak
-```
+### Keycloak takes a long time to start / healthcheck fails
 
-**Verify no conflicting containers:**
+A first start with realm import and migrations against an empty DB can take up to 60 seconds. If `start_period: 60s` is not enough (slow machine), increase it in `compose.yml`.
+
+### Port conflict
 
 ```sh
-docker ps -a | grep -E "keycloak|grafana|prometheus|postgres"
+lsof -i :3000 -i :8080 -i :9090
 ```
+Override via `.env` (`KC_PORT`, `GF_SERVER_HTTP_PORT`, `PROMETHEUS_PORT`).
 
-### Common Issues
+## Production checklist
 
-| Issue | Solution |
-|-------|----------|
-| Port already in use | Stop conflicting services or change ports in `.env` |
-| Keycloak won't connect to DB | Check PostgreSQL logs: `docker compose logs postgres` |
-| Grafana OAuth fails | Verify `KC_HOSTNAME` and `GF_HOSTNAME` match your setup |
-| Metrics not appearing | Check Prometheus targets: http://localhost:9090/targets |
+Before using this anywhere other than local dev:
 
-### Health Checks
-
-```sh
-# PostgreSQL
-docker compose exec postgres pg_isready -U keycloak
-
-# Prometheus
-curl http://localhost:9090/-/healthy
-
-# Grafana
-curl http://localhost:3000/api/health
-```
+- [ ] Change **all** default passwords in `.env` (Postgres, Keycloak bootstrap admin, Grafana admin)
+- [ ] Switch `start-dev` → `start` in Keycloak's `command`, explicitly configure `KC_HOSTNAME`, `KC_HOSTNAME_STRICT=true`, `KC_PROXY_HEADERS=xforwarded` (if behind a reverse proxy)
+- [ ] TLS across the whole perimeter; remove `GF_AUTH_GENERIC_OAUTH_TLS_SKIP_VERIFY_INSECURE`, set `sslRequired: external`/`all` in the realm
+- [ ] Persistent storage for Postgres instead of tmpfs (named volume + backups; CloudNativePG for HA)
+- [ ] Secrets via Vault / Docker secrets / SOPS, not from `.env`
+- [ ] Keycloak — confidential client (with client_secret) instead of public + PKCE for sensitive realms
+- [ ] Remove the bootstrap admin after first launch, create personal admin accounts
+- [ ] Resource limits (`deploy.resources.limits.memory/cpus`)
+- [ ] Prometheus — external `remote_write` to VictoriaMetrics/Thanos/Mimir; local 30d retention is not viable for production load
+- [ ] Alerts (Alertmanager) on JVM heap saturation, GC pause spikes, Agroal pool exhaustion, scrape errors
 
 ## Resources
 
-- [Keycloak Documentation](https://www.keycloak.org/documentation)
-- [Keycloak Metrics](https://www.keycloak.org/server/configuration-metrics)
-- [Prometheus Querying](https://prometheus.io/docs/prometheus/latest/querying/basics/)
-- [Grafana Dashboards](https://grafana.com/grafana/dashboards/)
-- [Docker Compose Reference](https://docs.docker.com/compose/compose-file/)
+- [Keycloak docs](https://www.keycloak.org/documentation)
+- [Keycloak metrics](https://www.keycloak.org/observability/configuration-metrics)
+- [Grafana OAuth (generic)](https://grafana.com/docs/grafana/latest/setup-grafana/configure-security/configure-authentication/generic-oauth/)
+- [Prometheus query basics](https://prometheus.io/docs/prometheus/latest/querying/basics/)
+- [Docker Compose spec](https://docs.docker.com/compose/compose-file/)

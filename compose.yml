@@ -4,86 +4,141 @@ x-logging: &logging
     max-size: "10m"
     max-file: "3"
 
+x-security-opt: &security-opt
+  - no-new-privileges:true
+
+networks:
+  default:
+    name: keycloak-stack
+
 services:
   postgres:
     image: postgres:${POSTGRES_VERSION}
+    container_name: keycloak-postgres
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "keycloak"]
+    security_opt: *security-opt
     environment:
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: password
-    volumes:
-      - type: tmpfs
-        target: /var/lib/postgresql/data
-        tmpfs:
-          size: 100000000
+      PGDATA: /var/lib/postgresql/data/pgdata
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    tmpfs:
+      - /var/lib/postgresql/data:size=256m
     logging: *logging
 
   keycloak:
     image: keycloak/keycloak:${KC_VERSION}
+    container_name: keycloak
     command: ["start-dev", "--import-realm"]
     restart: unless-stopped
+    security_opt: *security-opt
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       KC_DB: postgres
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: password
       KC_DB_URL: "jdbc:postgresql://postgres:5432/keycloak"
-      KC_METRICS_ENABLED: true
+      KC_METRICS_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_HTTP_MANAGEMENT_PORT: "9000"
       KC_LOG_LEVEL: ${KC_LOG_LEVEL}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
       KC_REALM_NAME: ${KC_REALM_NAME}
-      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN}
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       GF_URL: ${GF_HOSTNAME}:${GF_SERVER_HTTP_PORT}
       GF_ADMIN_USERNAME: ${GF_ADMIN_USERNAME}
       GF_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD}
     ports:
-      - ${KC_PORT}:8080
+      - "${KC_PORT}:8080"
     volumes:
       - ./keycloak:/opt/keycloak/data/import:ro
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - >
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          head -n1 <&3 | grep -q '200'
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
     logging: *logging
 
   prometheus:
     image: prom/prometheus:${PROMETHEUS_VERSION}
+    container_name: keycloak-prometheus
+    restart: unless-stopped
+    security_opt: *security-opt
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=30d'
       - '--storage.tsdb.wal-compression'
       - '--web.enable-lifecycle'
-    restart: unless-stopped
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    depends_on:
+      keycloak:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      test: ["CMD", "wget", "--tries=1", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     ports:
-      - ${PROMETHEUS_PORT}:9090
+      - "${PROMETHEUS_PORT}:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     logging: *logging
 
   grafana:
     image: grafana/grafana:${GF_VERSION}
+    container_name: keycloak-grafana
     restart: unless-stopped
+    security_opt: *security-opt
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
     ports:
-      - ${GF_SERVER_HTTP_PORT}:${GF_SERVER_HTTP_PORT}
+      - "${GF_SERVER_HTTP_PORT}:3000"
     healthcheck:
-      test: ["CMD", "wget", "--spider", "http://localhost:${GF_SERVER_HTTP_PORT}/api/health"]
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     environment:
-      GF_SERVER_HTTP_PORT: ${GF_SERVER_HTTP_PORT}
+      GF_SERVER_HTTP_PORT: "3000"
       GF_SERVER_ROOT_URL: ${GF_HOSTNAME}:${GF_SERVER_HTTP_PORT}
       GF_LOG_LEVEL: ${GF_LOG_LEVEL}
-      GF_AUTH_BASIC_ENABLED: true
-      GF_AUTH_DISABLE_LOGIN_FORM: true
-      GF_AUTH_GENERIC_OAUTH_TLS_SKIP_VERIFY_INSECURE: true
-      GF_AUTH_GENERIC_OAUTH_ENABLED: true
-      GF_AUTH_GENERIC_OAUTH_NAME: Keycloak
-      GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP: true
+      GF_SECURITY_ADMIN_USER: ${GF_ADMIN_USERNAME}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD}
+      GF_AUTH_BASIC_ENABLED: "true"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_GENERIC_OAUTH_ENABLED: "true"
+      GF_AUTH_GENERIC_OAUTH_NAME: "Keycloak"
+      GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP: "true"
       GF_AUTH_GENERIC_OAUTH_CLIENT_ID: "grafana"
-      GF_AUTH_GENERIC_OAUTH_EMAIL_ATTRIBUTE_NAME: "email:primary"
+      GF_AUTH_GENERIC_OAUTH_USE_PKCE: "true"
+      GF_AUTH_GENERIC_OAUTH_EMAIL_ATTRIBUTE_NAME: "email"
       GF_AUTH_GENERIC_OAUTH_SCOPES: "openid profile email"
+      GF_AUTH_GENERIC_OAUTH_TLS_SKIP_VERIFY_INSECURE: "true"
       GF_AUTH_GENERIC_OAUTH_AUTH_URL: ${KC_HOSTNAME}:${KC_PORT}/realms/${KC_REALM_NAME}/protocol/openid-connect/auth
-      GF_AUTH_GENERIC_OAUTH_TOKEN_URL: http://keycloak:${KC_PORT}/realms/${KC_REALM_NAME}/protocol/openid-connect/token
-      GF_AUTH_GENERIC_OAUTH_API_URL: ${KC_HOSTNAME}:${KC_PORT}/realms/${KC_REALM_NAME}/protocol/openid-connect/userinfo
+      GF_AUTH_GENERIC_OAUTH_TOKEN_URL: http://keycloak:8080/realms/${KC_REALM_NAME}/protocol/openid-connect/token
+      GF_AUTH_GENERIC_OAUTH_API_URL: http://keycloak:8080/realms/${KC_REALM_NAME}/protocol/openid-connect/userinfo
+      GF_AUTH_GENERIC_OAUTH_SIGNOUT_REDIRECT_URL: ${KC_HOSTNAME}:${KC_PORT}/realms/${KC_REALM_NAME}/protocol/openid-connect/logout?post_logout_redirect_uri=${GF_HOSTNAME}:${GF_SERVER_HTTP_PORT}/login&client_id=grafana
     volumes:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro

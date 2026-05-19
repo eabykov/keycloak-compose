@@ -2,14 +2,21 @@ global:
   scrape_interval: 15s
   scrape_timeout: 10s
   evaluation_interval: 15s
+  external_labels:
+    cluster: keycloak-compose
+    env: local
 
 scrape_configs:
   - job_name: prometheus
     metrics_path: /metrics
     static_configs:
       - targets: ['localhost:9090']
+        labels:
+          service: prometheus
 
   - job_name: keycloak
     metrics_path: /metrics
     static_configs:
       - targets: ['keycloak:9000']
+        labels:
+          service: keycloak

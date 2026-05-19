@@ -1,6 +1,6 @@
 {
-  "id": "${KC_REALM_NAME}",
   "realm": "${KC_REALM_NAME}",
+  "displayName": "Grafana OAuth",
   "sslRequired": "none",
   "enabled": true,
   "eventsEnabled": true,
@@ -12,26 +12,39 @@
   },
   "clients": [
     {
-      "id": "grafana",
       "clientId": "grafana",
-      "name": "grafana",
+      "name": "Grafana",
       "enabled": true,
       "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "protocol": "openid-connect",
       "rootUrl": "${GF_URL}",
       "adminUrl": "${GF_URL}",
       "baseUrl": "${GF_URL}",
       "redirectUris": [
-        "${GF_URL}/*"
+        "${GF_URL}/login/generic_oauth"
       ],
       "webOrigins": [
         "${GF_URL}"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${GF_URL}/login"
+      },
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email"
       ]
     }
   ],
   "users": [
     {
-      "id": "admin",
-      "email": "${GF_ADMIN_USERNAME}@admin",
+      "email": "${GF_ADMIN_USERNAME}@example.com",
       "username": "${GF_ADMIN_USERNAME}",
       "firstName": "DevOps",
       "lastName": "SRE",
